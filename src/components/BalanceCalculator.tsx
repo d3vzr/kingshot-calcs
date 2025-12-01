@@ -1,4 +1,5 @@
-import { useState, FormEvent, KeyboardEvent, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
 import './BalanceCalculator.css';
 
 interface ResourceData {
