@@ -24,6 +24,25 @@ interface ChestRecommendations {
   lv2Total: number;
 }
 
+interface ProfileData {
+  bread: string;
+  wood: string;
+  stone: string;
+  iron: string;
+  breadUnit: Unit;
+  woodUnit: Unit;
+  stoneUnit: Unit;
+  ironUnit: Unit;
+  lv1Chests: string;
+  lv2Chests: string;
+}
+
+interface Profile {
+  id: string;
+  name: string;
+  data: ProfileData;
+}
+
 const CHEST_VALUES = {
   lv1: { bread: 10000, wood: 10000, stone: 2000, iron: 500 },
   lv2: { bread: 100000, wood: 100000, stone: 20000, iron: 5000 }
@@ -37,11 +56,28 @@ const RESOURCE_INFO = {
   iron: { name: 'Iron', emoji: '⚔️' }
 };
 
-const STORAGE_KEY = 'kingshot-balancer-resources';
+const STORAGE_KEY = 'kingshot-balancer-profiles';
 
 type Unit = 'M' | 'B';
 
+const createEmptyProfileData = (): ProfileData => ({
+  bread: '', wood: '', stone: '', iron: '',
+  breadUnit: 'M', woodUnit: 'M', stoneUnit: 'M', ironUnit: 'M',
+  lv1Chests: '', lv2Chests: ''
+});
+
+const createNewProfile = (name: string): Profile => ({
+  id: Date.now().toString(),
+  name,
+  data: createEmptyProfileData()
+});
+
 export default function BalanceCalculator() {
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [currentProfileId, setCurrentProfileId] = useState<string>('');
+  const [newProfileName, setNewProfileName] = useState('');
+  const [showNewProfile, setShowNewProfile] = useState(false);
+  
   const [bread, setBread] = useState('');
   const [wood, setWood] = useState('');
   const [stone, setStone] = useState('');
@@ -58,44 +94,132 @@ export default function BalanceCalculator() {
   const [chestRecommendations, setChestRecommendations] = useState<ChestRecommendations | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load saved data on mount
+  // Load profiles on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const data = JSON.parse(saved);
-        setBread(data.bread || '');
-        setWood(data.wood || '');
-        setStone(data.stone || '');
-        setIron(data.iron || '');
-        setBreadUnit(data.breadUnit || 'M');
-        setWoodUnit(data.woodUnit || 'M');
-        setStoneUnit(data.stoneUnit || 'M');
-        setIronUnit(data.ironUnit || 'M');
-        setLv1Chests(data.lv1Chests || '');
-        setLv2Chests(data.lv2Chests || '');
+        const loadedProfiles = data.profiles || [];
+        const activeId = data.currentProfileId || '';
+        
+        if (loadedProfiles.length > 0) {
+          setProfiles(loadedProfiles);
+          const activeProfile = loadedProfiles.find((p: Profile) => p.id === activeId) || loadedProfiles[0];
+          setCurrentProfileId(activeProfile.id);
+          loadProfileData(activeProfile.data);
+        } else {
+          // Create default profiles
+          const mainProfile = createNewProfile('Main');
+          const altProfile = createNewProfile('Alt');
+          setProfiles([mainProfile, altProfile]);
+          setCurrentProfileId(mainProfile.id);
+        }
+      } else {
+        // First time - create default profiles
+        const mainProfile = createNewProfile('Main');
+        const altProfile = createNewProfile('Alt');
+        setProfiles([mainProfile, altProfile]);
+        setCurrentProfileId(mainProfile.id);
       }
     } catch (error) {
-      console.error('Error loading saved data:', error);
+      console.error('Error loading profiles:', error);
+      const mainProfile = createNewProfile('Main');
+      const altProfile = createNewProfile('Alt');
+      setProfiles([mainProfile, altProfile]);
+      setCurrentProfileId(mainProfile.id);
     }
     setIsLoaded(true);
   }, []);
 
-  // Save data whenever inputs change (only after initial load)
+  const loadProfileData = (data: ProfileData) => {
+    setBread(data.bread || '');
+    setWood(data.wood || '');
+    setStone(data.stone || '');
+    setIron(data.iron || '');
+    setBreadUnit(data.breadUnit || 'M');
+    setWoodUnit(data.woodUnit || 'M');
+    setStoneUnit(data.stoneUnit || 'M');
+    setIronUnit(data.ironUnit || 'M');
+    setLv1Chests(data.lv1Chests || '');
+    setLv2Chests(data.lv2Chests || '');
+    setResults(null);
+    setMostNeeded(null);
+    setAllZero(false);
+    setChestRecommendations(null);
+  };
+
+  // Save profiles whenever data changes
   useEffect(() => {
-    if (!isLoaded) return; // Don't save until initial load is complete
+    if (!isLoaded || !currentProfileId) return;
     
     try {
-      const data = { 
+      const currentData: ProfileData = {
         bread, wood, stone, iron,
         breadUnit, woodUnit, stoneUnit, ironUnit,
         lv1Chests, lv2Chests
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      
+      const updatedProfiles = profiles.map(p => 
+        p.id === currentProfileId ? { ...p, data: currentData } : p
+      );
+      
+      setProfiles(updatedProfiles);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        profiles: updatedProfiles,
+        currentProfileId
+      }));
     } catch (error) {
-      console.error('Error saving data:', error);
+      console.error('Error saving profiles:', error);
     }
-  }, [bread, wood, stone, iron, breadUnit, woodUnit, stoneUnit, ironUnit, lv1Chests, lv2Chests, isLoaded]);
+  }, [bread, wood, stone, iron, breadUnit, woodUnit, stoneUnit, ironUnit, lv1Chests, lv2Chests, isLoaded, currentProfileId]);
+
+  const switchProfile = (profileId: string) => {
+    const profile = profiles.find(p => p.id === profileId);
+    if (profile) {
+      setCurrentProfileId(profileId);
+      loadProfileData(profile.data);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        profiles,
+        currentProfileId: profileId
+      }));
+    }
+  };
+
+  const addProfile = () => {
+    const name = newProfileName.trim() || `Profile ${profiles.length + 1}`;
+    const newProfile = createNewProfile(name);
+    const updatedProfiles = [...profiles, newProfile];
+    setProfiles(updatedProfiles);
+    setCurrentProfileId(newProfile.id);
+    loadProfileData(newProfile.data);
+    setNewProfileName('');
+    setShowNewProfile(false);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      profiles: updatedProfiles,
+      currentProfileId: newProfile.id
+    }));
+  };
+
+  const deleteProfile = (profileId: string) => {
+    if (profiles.length <= 1) return; // Keep at least one profile
+    
+    const updatedProfiles = profiles.filter(p => p.id !== profileId);
+    setProfiles(updatedProfiles);
+    
+    if (currentProfileId === profileId) {
+      const newCurrent = updatedProfiles[0];
+      setCurrentProfileId(newCurrent.id);
+      loadProfileData(newCurrent.data);
+    }
+    
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      profiles: updatedProfiles,
+      currentProfileId: currentProfileId === profileId ? updatedProfiles[0].id : currentProfileId
+    }));
+  };
+
+  const currentProfile = profiles.find(p => p.id === currentProfileId);
 
   const RATIO = { bread: 20, wood: 20, stone: 4, iron: 1 };
 
@@ -255,6 +379,73 @@ export default function BalanceCalculator() {
     <div className="max-w-6xl mx-auto p-4 w-full grid gap-4 lg:grid-cols-[320px_1fr]">
       {/* Left Panel */}
       <div className="flex flex-col">
+        {/* Profile Selector */}
+        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">👤 Profile</span>
+            <button
+              type="button"
+              onClick={() => setShowNewProfile(!showNewProfile)}
+              className="text-xs px-2 py-1 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors"
+            >
+              + New
+            </button>
+          </div>
+          
+          {/* Profile Tabs */}
+          <div className="flex flex-wrap gap-1 mb-2">
+            {profiles.map(profile => (
+              <button
+                key={profile.id}
+                onClick={() => switchProfile(profile.id)}
+                className={`px-2 py-1 text-xs rounded-md transition-all flex items-center gap-1 ${
+                  currentProfileId === profile.id
+                    ? 'bg-indigo-500 text-white font-semibold'
+                    : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                {profile.name}
+                {profiles.length > 1 && currentProfileId === profile.id && (
+                  <span
+                    onClick={(e) => { e.stopPropagation(); deleteProfile(profile.id); }}
+                    className="ml-1 text-white/70 hover:text-white cursor-pointer"
+                    title="Delete profile"
+                  >
+                    ×
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          
+          {/* New Profile Input */}
+          {showNewProfile && (
+            <div className="flex gap-2 mt-2">
+              <input
+                type="text"
+                placeholder="Profile name..."
+                value={newProfileName}
+                onChange={(e) => setNewProfileName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addProfile()}
+                className="flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:border-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={addProfile}
+                className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+              >
+                Add
+              </button>
+            </div>
+          )}
+          
+          {currentProfile && (
+            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+              Active: {currentProfile.name}
+            </p>
+          )}
+        </div>
+
         <form onSubmit={(e: FormEvent) => { e.preventDefault(); handleCalculate(); }} className="flex flex-col gap-3">
           {/* Resource Inputs */}
           {[
