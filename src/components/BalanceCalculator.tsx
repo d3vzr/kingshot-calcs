@@ -93,6 +93,7 @@ export default function BalanceCalculator() {
   const [lv2Chests, setLv2Chests] = useState('');
   const [chestRecommendations, setChestRecommendations] = useState<ChestRecommendations | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
 
   // Load profiles on mount
   useEffect(() => {
@@ -151,7 +152,7 @@ export default function BalanceCalculator() {
 
   // Save profiles whenever data changes
   useEffect(() => {
-    if (!isLoaded || !currentProfileId) return;
+    if (!isLoaded || !currentProfileId || isSwitching) return;
     
     try {
       const currentData: ProfileData = {
@@ -172,17 +173,22 @@ export default function BalanceCalculator() {
     } catch (error) {
       console.error('Error saving profiles:', error);
     }
-  }, [bread, wood, stone, iron, breadUnit, woodUnit, stoneUnit, ironUnit, lv1Chests, lv2Chests, isLoaded, currentProfileId]);
+  }, [bread, wood, stone, iron, breadUnit, woodUnit, stoneUnit, ironUnit, lv1Chests, lv2Chests, isLoaded, currentProfileId, isSwitching]);
 
   const switchProfile = (profileId: string) => {
+    if (profileId === currentProfileId) return; // Already on this profile
+    
     const profile = profiles.find(p => p.id === profileId);
     if (profile) {
+      setIsSwitching(true); // Prevent saving during switch
       setCurrentProfileId(profileId);
       loadProfileData(profile.data);
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         profiles,
         currentProfileId: profileId
       }));
+      // Use setTimeout to allow state updates to complete before enabling save
+      setTimeout(() => setIsSwitching(false), 0);
     }
   };
 
